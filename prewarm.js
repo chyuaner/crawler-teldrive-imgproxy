@@ -4,7 +4,9 @@ const CONFIG = {
     teldriveBaseUrl: 'https://tdrive.yuaner.tw',
     imgproxyBaseUrl: 'https://imgproxy.yuaner.tw',
     statsInterval: 30,
-    maxConcurrentSizeBytes: 100 * 1024 * 1024 // 100MB
+    maxConcurrentSizeBytes: 100 * 1024 * 1024, // 100MB
+    threads: 10,
+    limit: 0
 };
 
 const rl = readline.createInterface({
@@ -49,7 +51,10 @@ function parseArgs() {
         access_token: '',
         cookie: '',
         path: '',
-        hash: ''
+        hash: '',
+        threads: 0,
+        sizeLimit: 0,
+        limit: 0
     };
 
     for (let i = 0; i < args.length; i++) {
@@ -64,6 +69,12 @@ function parseArgs() {
         else if (arg === '--path') options.path = args[++i];
         else if (arg.startsWith('--hash=')) options.hash = arg.substring(7);
         else if (arg === '--hash') options.hash = args[++i];
+        else if (arg.startsWith('--threads=')) options.threads = arg.substring(10);
+        else if (arg === '--threads') options.threads = args[++i];
+        else if (arg.startsWith('--size-limit=')) options.sizeLimit = arg.substring(13);
+        else if (arg === '--size-limit') options.sizeLimit = args[++i];
+        else if (arg.startsWith('--limit=')) options.limit = arg.substring(8);
+        else if (arg === '--limit') options.limit = args[++i];
     }
     return options;
 }
@@ -77,6 +88,9 @@ function showHelp() {
   --access_token <token>  設定 access_token (會自動轉為 Cookie)
   --cookie <cookie>       直接設定完整的 Cookie 字串
   --hash <hash>           手動指定 Hash (若不指定，將嘗試從 API 自動抓取)
+  --threads <num>         限制同時執行的執行緒數 (預設 10, 完全單線程請設 1)
+  --size-limit <mb>       限制同時處理的圖片原始大小總和 (MB, 預設 100)
+  --limit <num>           限制總處理圖片數量，達到後即停止
   --help                  顯示此幫助訊息
 
 範例:
@@ -137,6 +151,10 @@ async function main() {
         showHelp();
         process.exit(0);
     }
+
+    if (opts.threads) CONFIG.threads = parseInt(opts.threads);
+    if (opts.sizeLimit) CONFIG.maxConcurrentSizeBytes = parseInt(opts.sizeLimit) * 1024 * 1024;
+    if (opts.limit) CONFIG.limit = parseInt(opts.limit);
 
     console.log(`${colors.cyan}=== Teldrive imgproxy 預覽縮圖熱預載爬蟲 ===${colors.reset}\n`);
     
@@ -216,18 +234,33 @@ async function main() {
     console.log(`\n${colors.cyan}開始爬取...${colors.reset}\n`);
 
     const startTime = Date.now();
-    let stats = { hit: 0, miss: 0, other: 0, total: 0 };
+    let stats = { hit: 0, miss: 0, other: 0, total: 0, enqueued: 0 };
     
     let activePromises = new Set();
     let currentProcessingBytes = 0;
+    let shouldStop = false;
 
     async function enqueueItem(item, displayName, manualHash, stats, startTime) {
+        if (CONFIG.limit > 0 && stats.enqueued >= CONFIG.limit) {
+            shouldStop = true;
+            return;
+        }
+
         const fileSize = item.size || 0;
         
-        while (activePromises.size > 0 && currentProcessingBytes + fileSize > CONFIG.maxConcurrentSizeBytes) {
+        while (activePromises.size > 0 && (
+            (currentProcessingBytes + fileSize > CONFIG.maxConcurrentSizeBytes && activePromises.size > 0) || 
+            activePromises.size >= CONFIG.threads
+        )) {
             await Promise.race(activePromises);
         }
 
+        if (CONFIG.limit > 0 && stats.enqueued >= CONFIG.limit) {
+            shouldStop = true;
+            return;
+        }
+
+        stats.enqueued++;
         currentProcessingBytes += fileSize;
         
         const p = (async () => {
@@ -245,7 +278,7 @@ async function main() {
     if (mode === '1') {
         // Mode 1: Global recent files
         let page = 1;
-        while (true) {
+        while (!shouldStop) {
             const url = `${CONFIG.teldriveBaseUrl}/api/files?page=${page}&order=desc&sort=updatedAt&operation=find&type=file`;
             try {
                 const data = await fetchApi(url, cookie);
@@ -256,6 +289,7 @@ async function main() {
                 for (const item of items) {
                     if (isImage(item)) {
                         await enqueueItem(item, item.name, manualHash, stats, startTime);
+                        if (shouldStop) break;
                     }
                 }
                 
@@ -273,11 +307,11 @@ async function main() {
         let queue = [startPath];
         const baseUrlObj = new URL(baseFolderUrl);
         
-        while (queue.length > 0) {
+        while (queue.length > 0 && !shouldStop) {
             const currentPath = queue.shift();
             let page = 1;
             
-            while (true) {
+            while (!shouldStop) {
                 // Construct URL for current path and page manually to match Teldrive's expected encoding
                 const url = `${CONFIG.teldriveBaseUrl}/api/files?page=${page}&order=asc&sort=name&path=${encodeURIComponent(currentPath)}`;
                 
@@ -293,6 +327,7 @@ async function main() {
                             queue.push(fullPath);
                         } else if (isImage(item)) {
                             await enqueueItem(item, fullPath, manualHash, stats, startTime);
+                            if (shouldStop) break;
                         }
                     }
                     page++;
