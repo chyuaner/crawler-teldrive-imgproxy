@@ -1,5 +1,12 @@
 const readline = require('readline');
 
+const CONFIG = {
+    teldriveBaseUrl: 'https://tdrive.yuaner.tw',
+    imgproxyBaseUrl: 'https://imgproxy.yuaner.tw',
+    statsInterval: 30,
+    maxConcurrentSizeBytes: 100 * 1024 * 1024 // 100MB
+};
+
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout
@@ -13,13 +20,6 @@ const colors = {
     green: "\x1b[32m",
     yellow: "\x1b[33m",
     cyan: "\x1b[36m"
-};
-
-const CONFIG = {
-    teldriveBaseUrl: 'https://tdrive.yuaner.tw',
-    imgproxyBaseUrl: 'https://imgproxy.yuaner.tw',
-    statsInterval: 50,
-    maxConcurrentSizeBytes: 100 * 1024 * 1024 // 100MB
 };
 
 function formatElapsed(startTime) {
