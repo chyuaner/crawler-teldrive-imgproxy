@@ -18,7 +18,8 @@ const colors = {
 const CONFIG = {
     teldriveBaseUrl: 'https://tdrive.yuaner.tw',
     imgproxyBaseUrl: 'https://imgproxy.yuaner.tw',
-    statsInterval: 50
+    statsInterval: 50,
+    maxConcurrentSizeBytes: 100 * 1024 * 1024 // 100MB
 };
 
 function formatElapsed(startTime) {
@@ -118,8 +119,8 @@ async function prewarmImage(file, manualHash) {
         // consume the body to free memory
         await res.arrayBuffer();
         
-        const cacheStatus = res.headers.get('cf-cache-status') || 'UNKNOWN';
-        return { status: res.status, cacheStatus, url: imgproxyUrl };
+        const cacheStatus = res.headers.get('cf-cache-status');
+        return { status: res.status, cacheStatus: cacheStatus || 'null (無此標頭)', url: imgproxyUrl };
     } catch (e) {
         return { error: e.message };
     }
@@ -217,6 +218,30 @@ async function main() {
     const startTime = Date.now();
     let stats = { hit: 0, miss: 0, other: 0, total: 0 };
     
+    let activePromises = new Set();
+    let currentProcessingBytes = 0;
+
+    async function enqueueItem(item, displayName, manualHash, stats, startTime) {
+        const fileSize = item.size || 0;
+        
+        while (activePromises.size > 0 && currentProcessingBytes + fileSize > CONFIG.maxConcurrentSizeBytes) {
+            await Promise.race(activePromises);
+        }
+
+        currentProcessingBytes += fileSize;
+        
+        const p = (async () => {
+            try {
+                await processItem(item, displayName, manualHash, stats, startTime);
+            } finally {
+                currentProcessingBytes -= fileSize;
+            }
+        })();
+        
+        activePromises.add(p);
+        p.finally(() => activePromises.delete(p));
+    }
+    
     if (mode === '1') {
         // Mode 1: Global recent files
         let page = 1;
@@ -230,7 +255,7 @@ async function main() {
 
                 for (const item of items) {
                     if (isImage(item)) {
-                        await processItem(item, item.name, manualHash, stats, startTime);
+                        await enqueueItem(item, item.name, manualHash, stats, startTime);
                     }
                 }
                 
@@ -267,7 +292,7 @@ async function main() {
                         if (item.type === 'folder' || item.mimeType === 'application/vnd.teldrive.folder') {
                             queue.push(fullPath);
                         } else if (isImage(item)) {
-                            await processItem(item, fullPath, manualHash, stats, startTime);
+                            await enqueueItem(item, fullPath, manualHash, stats, startTime);
                         }
                     }
                     page++;
@@ -279,36 +304,39 @@ async function main() {
         }
     }
 
+    while (activePromises.size > 0) {
+        await Promise.all(activePromises);
+    }
+
     printStats(stats, startTime, true);
     
     process.exit(0);
 }
 
 async function processItem(item, displayName, manualHash, stats, startTime) {
-    stats.total++;
-    process.stdout.write(`[${stats.total}] 處理中: ${displayName} ... `);
-    
     const result = await prewarmImage(item, manualHash);
     
+    stats.total++;
+    
+    let statusText = '';
     if (result.error) {
-        console.log(`${colors.yellow}錯誤 (${result.error})${colors.reset}`);
         stats.other++;
-        return;
-    }
-
-    if (result.cacheStatus === 'HIT') {
+        statusText = `${colors.yellow}錯誤 (${result.error})${colors.reset}`;
+    } else if (result.cacheStatus === 'HIT') {
         stats.hit++;
-        console.log(`${colors.green}HIT${colors.reset}`);
+        statusText = `${colors.green}HIT${colors.reset}`;
     } else if (result.cacheStatus === 'MISS') {
         stats.miss++;
-        console.log(`MISS`);
+        statusText = `MISS`;
     } else if (result.cacheStatus === 'DYNAMIC') {
         stats.other++;
-        console.log(`${colors.red}DYNAMIC (警告: 此請求未被快取，變為無效動作)${colors.reset}`);
+        statusText = `${colors.red}DYNAMIC (警告: 此請求未被快取，變為無效動作)${colors.reset}`;
     } else {
         stats.other++;
-        console.log(`${colors.yellow}${result.cacheStatus}${colors.reset}`);
+        statusText = `${colors.yellow}${result.cacheStatus}${colors.reset}`;
     }
+
+    console.log(`[${stats.total}] 處理完畢: ${displayName} ... ${statusText}`);
 
     if (stats.total % CONFIG.statsInterval === 0) {
         printStats(stats, startTime);
