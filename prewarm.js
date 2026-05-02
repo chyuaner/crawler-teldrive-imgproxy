@@ -17,8 +17,28 @@ const colors = {
 
 const CONFIG = {
     teldriveBaseUrl: 'https://tdrive.yuaner.tw',
-    imgproxyBaseUrl: 'https://imgproxy.yuaner.tw'
+    imgproxyBaseUrl: 'https://imgproxy.yuaner.tw',
+    statsInterval: 50
 };
+
+function formatElapsed(startTime) {
+    const elapsedMs = Date.now() - startTime;
+    const seconds = Math.floor((elapsedMs / 1000) % 60);
+    const minutes = Math.floor((elapsedMs / (1000 * 60)) % 60);
+    const hours = Math.floor(elapsedMs / (1000 * 60 * 60));
+    return `${hours}h ${minutes}m ${seconds}s`;
+}
+
+function printStats(stats, startTime, isFinal = false) {
+    const title = isFinal ? "=== 執行完畢 ===" : `=== 中途統計 (第 ${stats.total} 筆) ===`;
+    console.log(`\n${colors.cyan}${title}${colors.reset}`);
+    console.log(`總計處理圖片: ${stats.total}`);
+    console.log(`${colors.green}HIT: ${stats.hit}${colors.reset}`);
+    console.log(`MISS: ${stats.miss}`);
+    console.log(`其他狀態: ${stats.other}`);
+    console.log(`已執行時間: ${formatElapsed(startTime)}`);
+    if (!isFinal) console.log(`${colors.cyan}====================================${colors.reset}\n`);
+}
 
 function parseArgs() {
     const args = process.argv.slice(2);
@@ -194,6 +214,7 @@ async function main() {
 
     console.log(`\n${colors.cyan}開始爬取...${colors.reset}\n`);
 
+    const startTime = Date.now();
     let stats = { hit: 0, miss: 0, other: 0, total: 0 };
     
     if (mode === '1') {
@@ -209,7 +230,7 @@ async function main() {
 
                 for (const item of items) {
                     if (isImage(item)) {
-                        await processItem(item, item.name, manualHash, stats);
+                        await processItem(item, item.name, manualHash, stats, startTime);
                     }
                 }
                 
@@ -246,7 +267,7 @@ async function main() {
                         if (item.type === 'folder' || item.mimeType === 'application/vnd.teldrive.folder') {
                             queue.push(fullPath);
                         } else if (isImage(item)) {
-                            await processItem(item, fullPath, manualHash, stats);
+                            await processItem(item, fullPath, manualHash, stats, startTime);
                         }
                     }
                     page++;
@@ -258,16 +279,12 @@ async function main() {
         }
     }
 
-    console.log(`\n${colors.cyan}=== 執行完畢 ===${colors.reset}`);
-    console.log(`總計處理圖片: ${stats.total}`);
-    console.log(`${colors.green}HIT: ${stats.hit}${colors.reset}`);
-    console.log(`MISS: ${stats.miss}`);
-    console.log(`其他狀態: ${stats.other}`);
+    printStats(stats, startTime, true);
     
     process.exit(0);
 }
 
-async function processItem(item, displayName, manualHash, stats) {
+async function processItem(item, displayName, manualHash, stats, startTime) {
     stats.total++;
     process.stdout.write(`[${stats.total}] 處理中: ${displayName} ... `);
     
@@ -291,6 +308,10 @@ async function processItem(item, displayName, manualHash, stats) {
     } else {
         stats.other++;
         console.log(`${colors.yellow}${result.cacheStatus}${colors.reset}`);
+    }
+
+    if (stats.total % CONFIG.statsInterval === 0) {
+        printStats(stats, startTime);
     }
 }
 
