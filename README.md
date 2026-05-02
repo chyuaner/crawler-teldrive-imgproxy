@@ -74,6 +74,9 @@ export default {
 ## 執行
 - `--access_token` 請從當前登入的Cookie去找access_token並貼入
 - `--path` 可貼入路徑字串，或是直接從網址複製已被URL Encode的路徑也可以
+- `--threads` 限制同時執行的執行緒數 (預設 10)
+- `--size-limit` 限制同時處理的圖片原始大小總和 (MB, 預設 100)
+- `--limit` 限制總處理圖片數量，達到後即停止
 
 ### 互動對話式
 ```bash
