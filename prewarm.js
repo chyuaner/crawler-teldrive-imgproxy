@@ -316,14 +316,33 @@ async function main() {
                 } catch (e) {}
             } else {
                 try {
-                    itemPath = decodeURIComponent(itemPath);
+                    itemPath = decodeURIComponent(itemPath.replace(/\+/g, ' '));
                 } catch (e) {}
             }
             
             if (!itemPath) continue;
 
+            if (itemPath.endsWith('/') && itemPath.length > 1) {
+                itemPath = itemPath.slice(0, -1);
+            }
+
             if (itemPath === '/') {
                 dirQueue.push('/');
+                continue;
+            }
+
+            let isDefinitelyDir = false;
+            try {
+                const url = `${CONFIG.teldriveBaseUrl}/api/files?page=1&order=asc&sort=name&path=${encodeURIComponent(itemPath)}`;
+                const data = await fetchApi(url, cookie);
+                const pageItems = Array.isArray(data) ? data : (data.data || data.items || data.results || []);
+                if (pageItems.length > 0) {
+                    isDefinitelyDir = true;
+                }
+            } catch (e) {}
+
+            if (isDefinitelyDir) {
+                dirQueue.push(itemPath);
                 continue;
             }
 
