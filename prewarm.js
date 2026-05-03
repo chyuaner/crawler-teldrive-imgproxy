@@ -11,7 +11,7 @@ const CONFIG = {
 
 const rl = readline.createInterface({
   input: process.stdin,
-  output: process.stdout
+  output: process.stdin.isTTY ? process.stdout : undefined
 });
 
 const ask = (query) => new Promise(resolve => rl.question(query, resolve));
@@ -385,7 +385,8 @@ async function main() {
             } else {
                 stats.total++;
                 stats.other++;
-                console.log(`[${stats.total}] 處理完畢: ${itemPath} ... ${colors.red}找不到檔案資訊${colors.reset}`);
+                const paddedTotal = stats.total.toString().padStart(2, ' ');
+                console.log(`\x1b[3G${colors.red}[${paddedTotal}]  NOT_FD: ${itemPath}${colors.reset}`);
             }
         }
         
