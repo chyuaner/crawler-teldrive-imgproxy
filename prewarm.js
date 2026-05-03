@@ -467,11 +467,14 @@ async function processItem(item, itemPath, manualHash, stats, startTime) {
         isFailed = true;
     }
 
+    const cleanStatus = statusText.replace(/\x1b\[[0-9;]*m/g, '');
+    const padding = ' '.repeat(Math.max(0, 6 - cleanStatus.length));
+    const paddedTotal = stats.total.toString().padStart(2, ' ');
+
     if (isFailed) {
-        const cleanStatus = statusText.replace(/\x1b\[[0-9;]*m/g, '');
-        console.log(`${colors.red}[${stats.total}] ${cleanStatus.padStart(4, ' ')}: ${itemPath}${colors.reset}`);
+        console.log(`\x1b[3G${colors.red}[${paddedTotal}] ${padding}${cleanStatus}: ${itemPath}${colors.reset}`);
     } else {
-        console.log(`[${stats.total}] ${statusText.padStart(4, ' ')}: ${itemPath}`);
+        console.log(`\x1b[3G[${paddedTotal}] ${padding}${statusText}: ${itemPath}`);
     }
 
     if (isFailed) {
