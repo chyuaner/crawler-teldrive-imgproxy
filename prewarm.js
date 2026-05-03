@@ -36,8 +36,8 @@ function printStats(stats, startTime, isFinal = false) {
     const title = isFinal ? "=== 執行完畢 ===" : `=== 中途統計 (第 ${stats.total} 筆) ===`;
     console.log(`\n${colors.cyan}${title}${colors.reset}`);
     console.log(`總計處理圖片: ${stats.total}`);
-    console.log(`HIT: ${stats.hit}`);
-    console.log(`${colors.green}MISS: ${stats.miss}${colors.reset}`);
+    console.log(`${colors.green}HIT: ${stats.hit}${colors.reset}`);
+    console.log(`${colors.yellow}MISS: ${stats.miss}${colors.reset}`);
     console.log(`${colors.red}其他狀態: ${stats.other}${colors.reset}`);
     console.log(`已執行時間: ${formatElapsed(startTime)}`);
     if (!isFinal) console.log(`${colors.cyan}====================================${colors.reset}\n`);
@@ -449,10 +449,10 @@ async function processItem(item, itemPath, manualHash, stats, startTime) {
         isFailed = true;
     } else if (result.cacheStatus === 'HIT') {
         stats.hit++;
-        statusText = `HIT`;
+        statusText = `${colors.green}HIT${colors.reset}`;
     } else if (result.cacheStatus === 'MISS') {
         stats.miss++;
-        statusText = `${colors.green}MISS${colors.reset}`;
+        statusText = `${colors.yellow}MISS${colors.reset}`;
     } else if (result.cacheStatus === 'DYNAMIC') {
         stats.other++;
         statusText = `${colors.red}DYNAMIC${colors.reset}`;
