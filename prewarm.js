@@ -248,7 +248,7 @@ async function main() {
     let currentProcessingBytes = 0;
     let shouldStop = false;
 
-    async function enqueueItem(item, displayName, manualHash, stats, startTime) {
+    async function enqueueItem(item, itemPath, manualHash, stats, startTime) {
         if (CONFIG.limit > 0 && stats.enqueued >= CONFIG.limit) {
             shouldStop = true;
             return;
@@ -273,7 +273,7 @@ async function main() {
         
         const p = (async () => {
             try {
-                await processItem(item, displayName, manualHash, stats, startTime);
+                await processItem(item, itemPath, manualHash, stats, startTime);
             } finally {
                 currentProcessingBytes -= fileSize;
             }
@@ -364,7 +364,7 @@ async function main() {
     process.exit(0);
 }
 
-async function processItem(item, displayName, manualHash, stats, startTime) {
+async function processItem(item, itemPath, manualHash, stats, startTime) {
     const result = await prewarmImage(item, manualHash);
     
     stats.total++;
@@ -387,7 +387,7 @@ async function processItem(item, displayName, manualHash, stats, startTime) {
         statusText = `${colors.red}${result.cacheStatus}${colors.reset}`;
     }
 
-    console.log(`[${stats.total}] 處理完畢: ${displayName} ... ${statusText}`);
+    console.log(`[${stats.total}] 處理完畢: ${itemPath} ... ${statusText}`);
 
     const isStatsDisabled = CONFIG.statsInterval === false || CONFIG.statsInterval === 'false';
     const isFolderStats = CONFIG.statsInterval === 0 || CONFIG.statsInterval === '0';
