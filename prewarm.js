@@ -157,7 +157,7 @@ async function prewarmImage(file, manualHash) {
         await res.arrayBuffer();
         
         const cacheStatus = res.headers.get('cf-cache-status');
-        return { status: res.status, cacheStatus: cacheStatus || 'null (無此標頭)', url: imgproxyUrl };
+        return { status: res.status, cacheStatus: cacheStatus || 'NULL', url: imgproxyUrl };
     } catch (e) {
         return { error: e.message };
     }
@@ -457,6 +457,10 @@ async function processItem(item, itemPath, manualHash, stats, startTime) {
         stats.other++;
         statusText = `${colors.red}DYNAMIC${colors.reset}`;
         isFailed = true;
+    } else if (result.cacheStatus === 'NULL') {
+        stats.other++;
+        statusText = `${colors.red}NULL${colors.reset}`;
+        isFailed = true;
     } else {
         stats.other++;
         statusText = `${colors.red}${result.cacheStatus}${colors.reset}`;
@@ -465,9 +469,9 @@ async function processItem(item, itemPath, manualHash, stats, startTime) {
 
     if (isFailed) {
         const cleanStatus = statusText.replace(/\x1b\[[0-9;]*m/g, '');
-        console.log(`${colors.red}[${stats.total}] ${cleanStatus}: ${itemPath}${colors.reset}`);
+        console.log(`${colors.red}[${stats.total}] ${cleanStatus.padStart(4, ' ')}: ${itemPath}${colors.reset}`);
     } else {
-        console.log(`[${stats.total}] ${statusText}: ${itemPath}`);
+        console.log(`[${stats.total}] ${statusText.padStart(4, ' ')}: ${itemPath}`);
     }
 
     if (isFailed) {
