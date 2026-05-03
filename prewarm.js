@@ -387,6 +387,9 @@ async function main() {
                 stats.other++;
                 const paddedTotal = stats.total.toString().padStart(2, ' ');
                 console.log(`\x1b[3G${colors.red}[${paddedTotal}]  NOT_FD: ${itemPath}${colors.reset}`);
+                if (!process.stderr.isTTY) {
+                    console.error(itemPath);
+                }
             }
         }
         
@@ -478,7 +481,7 @@ async function processItem(item, itemPath, manualHash, stats, startTime) {
         console.log(`\x1b[3G[${paddedTotal}] ${padding}${statusText}: ${itemPath}`);
     }
 
-    if (isFailed) {
+    if (isFailed && !process.stderr.isTTY) {
         console.error(itemPath);
     }
 
