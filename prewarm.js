@@ -43,6 +43,25 @@ function printStats(stats, startTime, isFinal = false) {
     if (!isFinal) console.log(`${colors.cyan}====================================${colors.reset}\n`);
 }
 
+function normalizePath(rawPath) {
+    if (!rawPath) return '';
+    let parsed = rawPath.trim();
+    if (parsed.startsWith('http://') || parsed.startsWith('https://')) {
+        try {
+            const urlObj = new URL(parsed);
+            parsed = urlObj.searchParams.get('path') || '';
+        } catch (e) {}
+    } else {
+        try {
+            parsed = decodeURIComponent(parsed.replace(/\+/g, ' '));
+        } catch (e) {}
+    }
+    if (parsed.endsWith('/') && parsed.length > 1) {
+        parsed = parsed.slice(0, -1);
+    }
+    return parsed;
+}
+
 function parseArgs() {
     const args = process.argv.slice(2);
     const options = {
@@ -306,25 +325,11 @@ async function main() {
         let dirQueue = [];
 
         // 1. Process explicit paths (can be URLs, URL-encoded paths, files, or folders)
-        for (let itemPath of explicitPaths) {
+        for (let rawItemPath of explicitPaths) {
             if (shouldStop) break;
             
-            if (itemPath.startsWith('http://') || itemPath.startsWith('https://')) {
-                try {
-                    const urlObj = new URL(itemPath);
-                    itemPath = urlObj.searchParams.get('path') || '';
-                } catch (e) {}
-            } else {
-                try {
-                    itemPath = decodeURIComponent(itemPath.replace(/\+/g, ' '));
-                } catch (e) {}
-            }
-            
+            const itemPath = normalizePath(rawItemPath);
             if (!itemPath) continue;
-
-            if (itemPath.endsWith('/') && itemPath.length > 1) {
-                itemPath = itemPath.slice(0, -1);
-            }
 
             if (itemPath === '/') {
                 dirQueue.push('/');
