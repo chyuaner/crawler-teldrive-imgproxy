@@ -3,7 +3,7 @@ const readline = require('readline');
 const CONFIG = {
     teldriveBaseUrl: 'https://tdrive.yuaner.tw',
     imgproxyBaseUrl: 'https://imgproxy.yuaner.tw',
-    statsInterval: 30,
+    statsInterval: 0, // 30:每30筆顯示一次統計資料，0:以資料夾為單位顯示統計資料，false:不顯示統計資料
     maxConcurrentSizeBytes: 100 * 1024 * 1024, // 100MB
     threads: 10,
     limit: 0
@@ -54,7 +54,8 @@ function parseArgs() {
         hash: '',
         threads: 0,
         sizeLimit: 0,
-        limit: 0
+        limit: 0,
+        statsInterval: undefined
     };
 
     for (let i = 0; i < args.length; i++) {
@@ -75,6 +76,8 @@ function parseArgs() {
         else if (arg === '--size-limit') options.sizeLimit = args[++i];
         else if (arg.startsWith('--limit=')) options.limit = arg.substring(8);
         else if (arg === '--limit') options.limit = args[++i];
+        else if (arg.startsWith('--stats-interval=')) options.statsInterval = arg.substring(17);
+        else if (arg === '--stats-interval') options.statsInterval = args[++i];
     }
     return options;
 }
@@ -91,6 +94,7 @@ function showHelp() {
   --threads <num>         限制同時執行的執行緒數 (預設 10, 完全單線程請設 1)
   --size-limit <mb>       限制同時處理的圖片原始大小總和 (MB, 預設 100)
   --limit <num>           限制總處理圖片數量，達到後即停止
+  --stats-interval <num>  統計間隔 (預設 30)。「0」代表以資料夾為單位，「false」代表不顯示中途統計
   --help                  顯示此幫助訊息
 
 範例:
@@ -155,6 +159,10 @@ async function main() {
     if (opts.threads) CONFIG.threads = parseInt(opts.threads);
     if (opts.sizeLimit) CONFIG.maxConcurrentSizeBytes = parseInt(opts.sizeLimit) * 1024 * 1024;
     if (opts.limit) CONFIG.limit = parseInt(opts.limit);
+    if (opts.statsInterval !== undefined) CONFIG.statsInterval = opts.statsInterval;
+
+    const isStatsDisabled = CONFIG.statsInterval === false || CONFIG.statsInterval === 'false';
+    const isFolderStats = CONFIG.statsInterval === 0 || CONFIG.statsInterval === '0';
 
     console.log(`${colors.cyan}=== Teldrive imgproxy 預覽縮圖熱預載爬蟲 ===${colors.reset}\n`);
     
@@ -336,6 +344,14 @@ async function main() {
                     break;
                 }
             }
+            
+            if (isFolderStats && !shouldStop) {
+                // 等待目前資料夾的所有任務完成，以顯示準確的該資料夾統計
+                while (activePromises.size > 0) {
+                    await Promise.all(activePromises);
+                }
+                printStats(stats, startTime);
+            }
         }
     }
 
@@ -373,8 +389,14 @@ async function processItem(item, displayName, manualHash, stats, startTime) {
 
     console.log(`[${stats.total}] 處理完畢: ${displayName} ... ${statusText}`);
 
-    if (stats.total % CONFIG.statsInterval === 0) {
-        printStats(stats, startTime);
+    const isStatsDisabled = CONFIG.statsInterval === false || CONFIG.statsInterval === 'false';
+    const isFolderStats = CONFIG.statsInterval === 0 || CONFIG.statsInterval === '0';
+
+    if (!isStatsDisabled && !isFolderStats) {
+        const interval = parseInt(CONFIG.statsInterval);
+        if (!isNaN(interval) && interval > 0 && stats.total % interval === 0) {
+            printStats(stats, startTime);
+        }
     }
 }
 
