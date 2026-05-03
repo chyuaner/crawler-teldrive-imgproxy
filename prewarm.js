@@ -372,19 +372,19 @@ async function processItem(item, displayName, manualHash, stats, startTime) {
     let statusText = '';
     if (result.error) {
         stats.other++;
-        statusText = `${colors.yellow}錯誤 (${result.error})${colors.reset}`;
+        statusText = `${colors.red}錯誤 (${result.error})${colors.reset}`;
     } else if (result.cacheStatus === 'HIT') {
         stats.hit++;
-        statusText = `${colors.green}HIT${colors.reset}`;
+        statusText = `${colors.yellow}HIT${colors.reset}`;
     } else if (result.cacheStatus === 'MISS') {
         stats.miss++;
-        statusText = `MISS`;
+        statusText = `${colors.green}MISS${colors.reset}`;
     } else if (result.cacheStatus === 'DYNAMIC') {
         stats.other++;
         statusText = `${colors.red}DYNAMIC (警告: 此請求未被快取，變為無效動作)${colors.reset}`;
     } else {
         stats.other++;
-        statusText = `${colors.yellow}${result.cacheStatus}${colors.reset}`;
+        statusText = `${colors.red}${result.cacheStatus}${colors.reset}`;
     }
 
     console.log(`[${stats.total}] 處理完畢: ${displayName} ... ${statusText}`);
