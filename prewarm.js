@@ -463,7 +463,12 @@ async function processItem(item, itemPath, manualHash, stats, startTime) {
         isFailed = true;
     }
 
-    console.log(`[${stats.total}] 處理完畢: ${itemPath} ... ${statusText}`);
+    if (isFailed) {
+        const cleanStatus = statusText.replace(/\x1b\[[0-9;]*m/g, '');
+        console.log(`${colors.red}[${stats.total}] ${cleanStatus}: ${itemPath}${colors.reset}`);
+    } else {
+        console.log(`[${stats.total}] ${statusText}: ${itemPath}`);
+    }
 
     if (isFailed) {
         console.error(itemPath);
