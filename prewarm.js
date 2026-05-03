@@ -381,7 +381,7 @@ async function processItem(item, displayName, manualHash, stats, startTime) {
         statusText = `${colors.green}MISS${colors.reset}`;
     } else if (result.cacheStatus === 'DYNAMIC') {
         stats.other++;
-        statusText = `${colors.red}DYNAMIC (警告: 此請求未被快取，變為無效動作)${colors.reset}`;
+        statusText = `${colors.red}DYNAMIC${colors.reset}`;
     } else {
         stats.other++;
         statusText = `${colors.red}${result.cacheStatus}${colors.reset}`;
