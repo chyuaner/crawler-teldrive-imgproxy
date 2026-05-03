@@ -50,7 +50,7 @@ function parseArgs() {
         recent: false,
         access_token: '',
         cookie: '',
-        path: '',
+        paths: [],
         hash: '',
         threads: 0,
         sizeLimit: 0,
@@ -66,8 +66,8 @@ function parseArgs() {
         else if (arg === '--access_token') options.access_token = args[++i];
         else if (arg.startsWith('--cookie=')) options.cookie = arg.substring(9);
         else if (arg === '--cookie') options.cookie = args[++i];
-        else if (arg.startsWith('--path=')) options.path = arg.substring(7);
-        else if (arg === '--path') options.path = args[++i];
+        else if (arg.startsWith('--path=')) options.paths.push(arg.substring(7));
+        else if (arg === '--path') options.paths.push(args[++i]);
         else if (arg.startsWith('--hash=')) options.hash = arg.substring(7);
         else if (arg === '--hash') options.hash = args[++i];
         else if (arg.startsWith('--threads=')) options.threads = arg.substring(10);
@@ -167,41 +167,18 @@ async function main() {
     console.log(`${colors.cyan}=== Teldrive imgproxy 預覽縮圖熱預載爬蟲 ===${colors.reset}\n`);
     
     let mode = '';
-    let baseFolderUrl = '';
-    let startPath = '';
+    let startPaths = [];
 
     if (opts.recent) {
         mode = '1';
-    } else if (opts.path) {
+    } else if (opts.paths.length > 0 || !process.stdin.isTTY) {
         mode = '2';
-        if (opts.path.startsWith('http://') || opts.path.startsWith('https://')) {
-            try {
-                const urlObj = new URL(opts.path);
-                startPath = urlObj.searchParams.get('path') || '';
-                baseFolderUrl = opts.path;
-            } catch (e) {
-                console.log(`${colors.red}網址解析失敗，請確認輸入正確。${colors.reset}`);
-                process.exit(1);
-            }
-        } else {
-            try {
-                startPath = decodeURIComponent(opts.path.replace(/\+/g, ' '));
-            } catch (e) {
-                startPath = opts.path;
-            }
-            baseFolderUrl = `${CONFIG.teldriveBaseUrl}/api/files?order=asc&sort=name`;
-        }
+        startPaths = [...opts.paths];
     } else {
         mode = await ask("請選擇爬取模式:\n1. 近期上傳 (全局)\n2. 指定資料夾遞迴\n請輸入 (1 或 2): ");
         if (mode === '2') {
-            baseFolderUrl = await ask("請輸入資料夾 API 網址 (如 https://tdrive.yuaner.tw/api/files?...): ");
-            try {
-                const urlObj = new URL(baseFolderUrl);
-                startPath = urlObj.searchParams.get('path') || '';
-            } catch (e) {
-                console.log(`${colors.red}網址解析失敗，請確認輸入正確。${colors.reset}`);
-                process.exit(1);
-            }
+            let baseFolderUrl = await ask("請輸入資料夾 API 網址 (如 https://tdrive.yuaner.tw/api/files?...): ");
+            startPaths.push(baseFolderUrl);
         }
     }
 
@@ -211,6 +188,10 @@ async function main() {
     }
 
     if (!cookie) {
+        if (!process.stdin.isTTY) {
+            console.error("在非互動模式下，必須透過 --cookie 或 --access_token 提供驗證資訊。");
+            process.exit(1);
+        }
         cookie = await ask("\n請輸入您的 Cookies (包含 access_token 等，這將用於取得檔案列表): ");
     }
 
@@ -234,7 +215,7 @@ async function main() {
     }
 
     let manualHash = opts.hash || inferredHash;
-    const isInteractive = !opts.recent && !opts.path && !opts.cookie && !opts.access_token;
+    const isInteractive = !opts.recent && opts.paths.length === 0 && !opts.cookie && !opts.access_token && process.stdin.isTTY;
     if (!manualHash && isInteractive) {
         manualHash = await ask("\n請輸入 Hash (可留空，若留空將嘗試從 API 檔案資訊中的 file.hash 自動推斷): ");
     }
@@ -311,28 +292,95 @@ async function main() {
             }
         }
     } else if (mode === '2') {
-        // Mode 2: Recursive folder
-        let queue = [startPath];
-        const baseUrlObj = new URL(baseFolderUrl);
+        const explicitPaths = [...startPaths];
         
-        while (queue.length > 0 && !shouldStop) {
-            const currentPath = queue.shift();
+        if (!process.stdin.isTTY) {
+            for await (const line of rl) {
+                if (line.trim()) {
+                    explicitPaths.push(line.trim());
+                }
+            }
+        }
+        
+        const folderCache = new Map();
+        let dirQueue = [];
+
+        // 1. Process explicit paths (can be URLs, URL-encoded paths, files, or folders)
+        for (let itemPath of explicitPaths) {
+            if (shouldStop) break;
+            
+            if (itemPath.startsWith('http://') || itemPath.startsWith('https://')) {
+                try {
+                    const urlObj = new URL(itemPath);
+                    itemPath = urlObj.searchParams.get('path') || '';
+                } catch (e) {}
+            } else {
+                try {
+                    itemPath = decodeURIComponent(itemPath);
+                } catch (e) {}
+            }
+            
+            if (!itemPath) continue;
+
+            if (itemPath === '/') {
+                dirQueue.push('/');
+                continue;
+            }
+
+            const lastSlashIndex = itemPath.lastIndexOf('/');
+            const parentPath = lastSlashIndex > 0 ? itemPath.substring(0, lastSlashIndex) : '/';
+            const fileName = itemPath.substring(lastSlashIndex + 1);
+            
+            if (!folderCache.has(parentPath)) {
+                const items = [];
+                let page = 1;
+                while (true) {
+                    const url = `${CONFIG.teldriveBaseUrl}/api/files?page=${page}&order=asc&sort=name&path=${encodeURIComponent(parentPath)}`;
+                    try {
+                        const data = await fetchApi(url, cookie);
+                        const pageItems = Array.isArray(data) ? data : (data.data || data.items || data.results || []);
+                        if (pageItems.length === 0) break;
+                        items.push(...pageItems);
+                        page++;
+                    } catch (e) {
+                        break;
+                    }
+                }
+                folderCache.set(parentPath, items);
+            }
+            
+            const items = folderCache.get(parentPath) || [];
+            const foundItem = items.find(i => i.name === fileName);
+            
+            if (foundItem) {
+                if (foundItem.type === 'folder' || foundItem.mimeType === 'application/vnd.teldrive.folder') {
+                    dirQueue.push(itemPath);
+                } else if (isImage(foundItem)) {
+                    await enqueueItem(foundItem, itemPath, manualHash, stats, startTime);
+                }
+            } else {
+                stats.total++;
+                stats.other++;
+                console.log(`[${stats.total}] 處理完畢: ${itemPath} ... ${colors.red}找不到檔案資訊${colors.reset}`);
+            }
+        }
+        
+        // 2. Process directory queue (recursive folder traversal)
+        while (dirQueue.length > 0 && !shouldStop) {
+            const currentPath = dirQueue.shift();
             let page = 1;
             
             while (!shouldStop) {
-                // Construct URL for current path and page manually to match Teldrive's expected encoding
                 const url = `${CONFIG.teldriveBaseUrl}/api/files?page=${page}&order=asc&sort=name&path=${encodeURIComponent(currentPath)}`;
-                
                 try {
                     const data = await fetchApi(url, cookie);
                     const items = Array.isArray(data) ? data : (data.data || data.items || data.results || []);
-                    
                     if (items.length === 0) break;
 
                     for (const item of items) {
                         const fullPath = currentPath === '/' ? `/${item.name}` : `${currentPath}/${item.name}`;
                         if (item.type === 'folder' || item.mimeType === 'application/vnd.teldrive.folder') {
-                            queue.push(fullPath);
+                            dirQueue.push(fullPath);
                         } else if (isImage(item)) {
                             await enqueueItem(item, fullPath, manualHash, stats, startTime);
                             if (shouldStop) break;
@@ -346,7 +394,6 @@ async function main() {
             }
             
             if (isFolderStats && !shouldStop) {
-                // 等待目前資料夾的所有任務完成，以顯示準確的該資料夾統計
                 while (activePromises.size > 0) {
                     await Promise.all(activePromises);
                 }
@@ -370,9 +417,12 @@ async function processItem(item, itemPath, manualHash, stats, startTime) {
     stats.total++;
     
     let statusText = '';
+    let isFailed = false;
+
     if (result.error) {
         stats.other++;
         statusText = `${colors.red}錯誤 (${result.error})${colors.reset}`;
+        isFailed = true;
     } else if (result.cacheStatus === 'HIT') {
         stats.hit++;
         statusText = `${colors.yellow}HIT${colors.reset}`;
@@ -382,12 +432,18 @@ async function processItem(item, itemPath, manualHash, stats, startTime) {
     } else if (result.cacheStatus === 'DYNAMIC') {
         stats.other++;
         statusText = `${colors.red}DYNAMIC${colors.reset}`;
+        isFailed = true;
     } else {
         stats.other++;
         statusText = `${colors.red}${result.cacheStatus}${colors.reset}`;
+        isFailed = true;
     }
 
     console.log(`[${stats.total}] 處理完畢: ${itemPath} ... ${statusText}`);
+
+    if (isFailed) {
+        console.error(itemPath);
+    }
 
     const isStatsDisabled = CONFIG.statsInterval === false || CONFIG.statsInterval === 'false';
     const isFolderStats = CONFIG.statsInterval === 0 || CONFIG.statsInterval === '0';
