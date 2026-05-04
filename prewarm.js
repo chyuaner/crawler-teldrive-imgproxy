@@ -4,7 +4,7 @@ const CONFIG = {
     teldriveBaseUrl: 'https://tdrive.yuaner.tw',
     imgproxyBaseUrl: 'https://imgproxy.yuaner.tw',
     statsInterval: 0, // 30:每30筆顯示一次統計資料，0:以資料夾為單位顯示統計資料，false:不顯示統計資料
-    maxConcurrentSizeBytes: 100 * 1024 * 1024, // 100MB
+    maxConcurrentSizeBytes: 70 * 1024 * 1024, // 100MB
     threads: 10,
     limit: 0
 };
