@@ -106,7 +106,7 @@ function showHelp() {
 
 選項:
   --recent                爬取模式：近期上傳 (全局)
-  --path <url/path>       爬取模式：指定資料夾遞迴。可直接貼上 API 網址，或是正規路徑 (如 "/[0] PT已下載備份/M-Team")
+  --path <url/path>       爬取模式：指定資料夾遞迴。可直接貼上 API 網址，或是正規路徑 (如 "/大量圖包/karaira[25P]")
   --access_token <token>  設定 access_token (會自動轉為 Cookie)
   --cookie <cookie>       直接設定完整的 Cookie 字串
   --hash <hash>           手動指定 Hash (若不指定，將嘗試從 API 自動抓取)
@@ -118,7 +118,7 @@ function showHelp() {
 
 範例:
   node prewarm.js --recent --access_token="eyJhbGci..."
-  node prewarm.js --path="/[0] PT已下載備份/M-Team/[0] 圖集" --access_token="..."
+  node prewarm.js --path="/大量圖包/karaira[25P]" --access_token="..."
 `);
 }
 
