@@ -144,8 +144,8 @@ async function prewarmImage(file, manualHash) {
 
     const fileUrl = `${CONFIG.teldriveBaseUrl}/api/files/${file.id}/${encodeURIComponent(file.name)}?hash=${hash}`;
     const encodedFileUrl = encodeURIComponent(fileUrl);
-    // 根據您的範例，使用雙斜線 //insecure...
-    const imgproxyUrl = `${CONFIG.imgproxyBaseUrl}//insecure/w:360/plain/${encodedFileUrl}`;
+    // 根據您的範例，使用雙斜線 /insecure...
+    const imgproxyUrl = `${CONFIG.imgproxyBaseUrl}/insecure/w:360/plain/${encodedFileUrl}`;
 
     try {
         const res = await fetch(imgproxyUrl, {
